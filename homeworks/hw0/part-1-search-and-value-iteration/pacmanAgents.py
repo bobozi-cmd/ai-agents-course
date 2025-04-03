@@ -12,7 +12,7 @@
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
 
-from pacman import Directions
+from pacman import Directions, GameState
 from game import Agent
 import random
 import game
@@ -21,7 +21,7 @@ import util
 class LeftTurnAgent(game.Agent):
     "An agent that turns left at every opportunity"
 
-    def getAction(self, state):
+    def getAction(self, state: GameState):
         legal = state.getLegalPacmanActions()
         current = state.getPacmanState().configuration.direction
         if current == Directions.STOP: current = Directions.NORTH
@@ -37,7 +37,7 @@ class GreedyAgent(Agent):
         self.evaluationFunction = util.lookup(evalFn, globals())
         assert self.evaluationFunction != None
 
-    def getAction(self, state):
+    def getAction(self, state: GameState):
         # Generate candidate actions
         legal = state.getLegalPacmanActions()
         if Directions.STOP in legal: legal.remove(Directions.STOP)

@@ -19,7 +19,7 @@ Pacman agents (in searchAgents.py).
 
 import util
 from game import Directions
-from typing import List
+from typing import List, Dict, Tuple
 
 class SearchProblem:
     """
@@ -90,7 +90,43 @@ def depthFirstSearch(problem: SearchProblem) -> List[Directions]:
     print("Start's successors:", problem.getSuccessors(problem.getStartState()))
     """
     "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    # 下面的代码在测评的时候必须注释掉，不然会被跟踪，导致测试失败, see details: GraphSearch.getSuccessors()
+    # print("Start:", problem.getStartState())
+    # print("Is the start a goal?", problem.isGoalState(problem.getStartState()))
+    # print("Start's successors:", problem.getSuccessors(problem.getStartState()))
+
+    path = []
+    findGoal = False
+    visited: List = []
+
+    def dfs(loc):
+        nonlocal findGoal, path, problem
+        # print(f"pass: {loc}")
+
+        if findGoal:
+            return
+
+        if problem.isGoalState(loc):
+            findGoal = True
+            return
+        
+        if loc in visited:
+            return
+        
+        visited.append(loc)
+
+        for successor in reversed(problem.getSuccessors(loc)): # For mediumMaze solution length == 130
+        # for successor in problem.getSuccessors(loc):
+            path.append(successor[1])
+            dfs(successor[0])
+            if findGoal:
+                return
+            path.pop()
+
+    loc = problem.getStartState()
+    dfs(loc)
+    print(f"path len is : {len(path)}")
+    return path
 
 def breadthFirstSearch(problem: SearchProblem) -> List[Directions]:
     """Search the shallowest nodes in the search tree first."""
