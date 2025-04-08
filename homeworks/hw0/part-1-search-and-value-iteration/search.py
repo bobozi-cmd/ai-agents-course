@@ -20,6 +20,7 @@ Pacman agents (in searchAgents.py).
 import util
 from game import Directions
 from typing import List, Dict, Tuple
+from collections import deque
 
 class SearchProblem:
     """
@@ -131,7 +132,48 @@ def depthFirstSearch(problem: SearchProblem) -> List[Directions]:
 def breadthFirstSearch(problem: SearchProblem) -> List[Directions]:
     """Search the shallowest nodes in the search tree first."""
     "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    
+    path_map = {} # loc : (parent, direction)
+    start = problem.getStartState()
+    
+    def bfs():
+        nonlocal path_map, start
+        visited = []
+        q = deque() # store (loc, direction, parent)
+        q.append((start, None, None))
+
+        while len(q) != 0:
+            sz = len(q)
+            for i in range(sz):
+                cur, direct, parent = q.popleft()
+                if cur in visited:
+                    continue
+
+                visited.append(cur)
+
+                if parent is not None:
+                    path_map[repr(cur)] = (parent, direct)
+                if problem.isGoalState(cur):
+                    return cur
+                
+                for successor in problem.getSuccessors(cur):
+                    q.append((successor[0], successor[1], cur))
+        return None
+
+    goal = bfs()
+    if goal is None:
+        return []
+
+    rpath = []
+    cur = goal
+    while cur != start:
+        cur, direct = path_map[repr(cur)]
+        rpath.append(direct)
+
+    rpath.reverse()
+    return rpath
+    
+
 
 def uniformCostSearch(problem: SearchProblem) -> List[Directions]:
     """Search the node of least total cost first."""
