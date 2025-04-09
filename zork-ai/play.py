@@ -11,6 +11,7 @@ from browser_use.dom.views import DOMElementNode
 from playwright.async_api import Page, ElementHandle, JSHandle, TimeoutError
 import asyncio
 import os, json, inspect, argparse, inspect, re
+from dataclasses import dataclass
 
 
 load_dotenv()
@@ -37,6 +38,22 @@ Adjectives: Some adjectives are understood and required when there are  two obje
 Prepositions: It may be necessary in some cases to include prepositions, but the parser attempts to handle cases which aren't ambiguous without.  Thus 'GIVE CAR TO DEMON' will work, as will 'GIVE DEMON CAR'.  'GIVE CAR DEMON' probably won't do anything interesting. When a preposition is used, it should be appropriate;  'GIVE CAR WITH DEMON' won't parse.
 """
 
+help_info_simple = """Useful commands:
+Youcan try all sorts of commmands on the `things` you see. Try the commands that make sense!
+If you meet a person, these should work:
+    GIVE something TO name
+    KILL name with something
+
+These commands are very common:
+    PUSH it, TAKE it, PULL it, DROP it, OPEN it, PUT it IN somthing, PUT it ON something
+
+You could also try:
+    EAT it, DRINK it, WAVE it, FILL it, WEAR it, SMELL it, TAKE it OFF, TURN it ON, BREAK it, DIG it, BURN it, ENTER it, MOVE it
+
+The Directions:
+    N, E, S, W, NE, SE, NW, SW, UP, DOWN
+"""
+
 background = """Welcome to ZORK!
 
 You are near a large dungeon, which is reputed to contain vast quantities of treasure.   Naturally, you wish to acquire some of it. In order to do so, you must of course remove it from the dungeon.  To receive full credit for it, you must deposit it safely in the trophy case in the living room of the house.
@@ -48,16 +65,26 @@ To determine how successful you have been, a score is kept. When you find a valu
 Of special note is a thief (always carrying a large bag) who likes to wander around in the dungeon (he has never been seen by the light of day).  He likes to take things.  Since he steals for pleasure rather than profit and is somewhat sadistic, he only takes things which you have seen.  Although he prefers valuables, sometimes in his haste he may take something which is worthless.  From time to time, he examines his take and discards objects which he doesn't like.  He may occasionally stop in a room you are visiting, but more often he just wanders through and rips you off (he is a skilled pickpocket).
 """
 
+@dataclass
+class Contents:
+    content: List
+    place: str
+    score: int
+    moves: int
+
+
 class Client:
 
     def chat(self, content: List) -> str:
         raise NotImplementedError()
-    
+
+
 class MaunalClient(Client):
 
-    def chat(self, content: List) -> str:
+    def chat(self, content: Contents) -> str:
         cmd = input("[q to exit]> ")
         return cmd
+
 
 class OpenAiClient(Client):
     system_prompt = """You are a player, You need to play a Text Game named zork.
@@ -72,11 +99,30 @@ Everytime you need to output a command based on chat history.
 ```
 {help_info}
 ```
+"""
+
+    normal_user_template = """Current Place: {place}, Current Score: {score}, Total Steps: {moves}
+{content}
 
 Note:
 - Your output MUST be concise command based on Help Info.
-- If you get lost, you need to go back based on historical information.
 """
+
+    normal_pattern = "(.*)"
+
+    react_user_template = """Current Place: {place}, Current Score: {score}, Total Steps: {moves}
+{content}
+
+## Output Format
+Action: Accurately and concisely command based on Help Info required at the current step
+Thought: you should always think about what to do at the current step
+
+Note:
+- Write a small plan and finally summarize your next action (with its target element) in one sentence in `Thought` part.
+"""
+
+    react_action_pattern = "Action: (.*)\n"
+    react_think_pattern = "Thought: (.*)"
 
     def __init__(self, api_key: str, base_url: str, model: str) -> None:
         from openai import OpenAI
@@ -84,24 +130,35 @@ Note:
         self.model = model
         self.message = []
 
-        self.message.append({"role": "system", "content": self.system_prompt.format(help_info=help_info, background=background)})
+        self.message.append({"role": "system", "content": self.system_prompt.format(help_info=help_info_simple, background=background)})
 
-    def chat(self, content: List) -> str:
-        # cmd = input("AI>")
-        # if cmd.lower() == 'q':
-        #     return cmd
-
-        self.message.append({"role": "user", "content": "\n".join(content)})
+    def chat(self, content: Contents) -> str:
+        # prompt = self.normal_user_template.format(content="\n".join(content.content), place=content.place, score=content.score, moves=content.moves)
+        prompt = self.react_user_template.format(content="\n".join(content.content), place=content.place, score=content.score, moves=content.moves)
+        self.message.append({"role": "user", "content": prompt})
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=self.message,
             temperature=0.0
         )
 
-        cmd = resp.choices[0].message.content
-        self.message.append({"role": "assistant", "content": cmd})
-        print(f">{cmd}")
-        return cmd
+        response = resp.choices[0].message.content
+        # res = re.search(self.normal_pattern, response, re.DOTALL)
+        action_res = re.search(self.react_action_pattern, response, re.DOTALL)
+        think_res = re.search(self.react_think_pattern, response, re.DOTALL)
+
+        # if res:
+        if action_res and think_res:
+            cmd = action_res.group(1)
+            thought = think_res.group(1)
+
+            self.message.append({"role": "assistant", "content": response})
+            print(f"<Think> {thought}")
+            print(f">{cmd}")
+            return cmd
+
+        print(f"<Error> Failed to match: {response}")
+        return "Q"
 
 
 class Player:
@@ -177,7 +234,7 @@ class Player:
             pass
         
     async def step(self) -> bool:
-        cmd = self.client.chat(self.message)
+        cmd = self.client.chat(Contents(content=self.message, place=self.place, score=self.score, moves=self.moves))
         if cmd.lower() == "q" or cmd.lower() == "quit":
             return False
         
